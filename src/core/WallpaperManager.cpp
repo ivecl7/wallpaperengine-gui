@@ -292,7 +292,47 @@ bool WallpaperManager::launchWallpaper(const QString& wallpaperId, const QString
     // Build command line arguments
     QStringList args;
     
-    // Add additional arguments (custom settings) first
+    // Add wallpaper-specific settings from ConfigManager
+    
+    // Add screen-root if configured for this wallpaper
+    QString screenRoot = config.getWallpaperScreenRoot(wallpaperId);
+    if (!screenRoot.isEmpty()) {
+        args << "--screen-root" << screenRoot;
+    }
+    
+    // Add audio settings if configured for this wallpaper
+    int volume = config.getWallpaperMasterVolume(wallpaperId);
+    if (volume != 15) { // Default is 15%
+        args << "--volume" << QString::number(volume);
+    }
+    
+    bool noAutoMute = config.getWallpaperNoAutoMute(wallpaperId);
+    if (noAutoMute) {
+        args << "--noautomute";
+    }
+    
+    bool noAudioProcessing = config.getWallpaperNoAudioProcessing(wallpaperId);
+    if (noAudioProcessing) {
+        args << "--no-audio-processing";
+    }
+    
+    bool silent = config.getWallpaperSilent(wallpaperId);
+    if (silent) {
+        args << "--silent";
+    }
+    
+    QString windowMode = config.getWallpaperWindowMode(wallpaperId);
+    if (!windowMode.isEmpty()) {
+        args << "--window" << windowMode;
+    }
+    
+    // Add audio device if configured
+    QString audioDevice = config.getWallpaperAudioDevice(wallpaperId);
+    if (!audioDevice.isEmpty() && audioDevice != "default") {
+        args << "--audio-device" << audioDevice;
+    }
+    
+    // Add additional arguments (custom settings) from UI
     args.append(additionalArgs);
     
     // Add assets directory if configured and not already present in additionalArgs

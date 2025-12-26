@@ -494,6 +494,43 @@ bool WNELAddon::launchExternalWallpaper(const QString& wallpaperId, const QStrin
     // Build command line arguments
     QStringList args;
     
+    // Add wallpaper-specific settings from ConfigManager
+    
+    // Add output (screen-root) if configured for this wallpaper
+    QString screenRoot = config.getWallpaperScreenRoot(wallpaperId);
+    if (!screenRoot.isEmpty()) {
+        args << "--output" << screenRoot; // WNEL uses --output instead of --screen-root
+    }
+    
+    // Add audio settings if configured for this wallpaper
+    int volume = config.getWallpaperMasterVolume(wallpaperId);
+    if (volume != 15) { // Default is 15%
+        // Convert volume from percentage (0-100) to decimal (0.0-1.0)
+        double volumeDecimal = volume / 100.0;
+        args << "--volume" << QString::number(volumeDecimal, 'f', 2);
+    }
+    
+    bool noAutoMute = config.getWallpaperNoAutoMute(wallpaperId);
+    if (noAutoMute) {
+        args << "--noautomute";
+    }
+    
+    bool noAudioProcessing = config.getWallpaperNoAudioProcessing(wallpaperId);
+    if (noAudioProcessing) {
+        args << "--no-audio-processing";
+    }
+    
+    bool silent = config.getWallpaperSilent(wallpaperId);
+    if (silent) {
+        args << "--silent";
+    }
+    
+    // Add audio device if configured (WNEL may not support this, but add if needed)
+    QString audioDevice = config.getWallpaperAudioDevice(wallpaperId);
+    if (!audioDevice.isEmpty() && audioDevice != "default") {
+        args << "--audio-device" << audioDevice;
+    }
+    
     // Convert linux-wallpaperengine arguments to WNEL format
     for (int i = 0; i < additionalArgs.size(); ++i) {
         const QString& arg = additionalArgs[i];

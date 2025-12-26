@@ -667,3 +667,115 @@ void ConfigManager::setValue(const QString& key, const QVariant& value)
     m_settings->setValue(key, value);
     m_settings->sync();
 }
+
+// Wallpaper-specific configuration
+QVariant ConfigManager::getWallpaperValue(const QString& wallpaperId, const QString& key, const QVariant& defaultValue) const
+{
+    QString fullKey = QString("wallpapers/%1/%2").arg(wallpaperId, key);
+    return m_settings->value(fullKey, defaultValue);
+}
+
+void ConfigManager::setWallpaperValue(const QString& wallpaperId, const QString& key, const QVariant& value)
+{
+    QString fullKey = QString("wallpapers/%1/%2").arg(wallpaperId, key);
+    m_settings->setValue(fullKey, value);
+    m_settings->sync();
+}
+
+// Convenience methods for wallpaper-specific settings
+QString ConfigManager::getWallpaperScreenRoot(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "screen_root", screenRoot()).toString();
+}
+
+void ConfigManager::setWallpaperScreenRoot(const QString& wallpaperId, const QString& screenRoot)
+{
+    setWallpaperValue(wallpaperId, "screen_root", screenRoot);
+}
+
+QString ConfigManager::getWallpaperAudioDevice(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "audio_device", audioDevice()).toString();
+}
+
+void ConfigManager::setWallpaperAudioDevice(const QString& wallpaperId, const QString& audioDevice)
+{
+    setWallpaperValue(wallpaperId, "audio_device", audioDevice);
+}
+
+int ConfigManager::getWallpaperMasterVolume(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "master_volume", masterVolume()).toInt();
+}
+
+void ConfigManager::setWallpaperMasterVolume(const QString& wallpaperId, int volume)
+{
+    setWallpaperValue(wallpaperId, "master_volume", volume);
+}
+
+bool ConfigManager::getWallpaperNoAutoMute(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "no_auto_mute", noAutoMute()).toBool();
+}
+
+void ConfigManager::setWallpaperNoAutoMute(const QString& wallpaperId, bool noAutoMute)
+{
+    setWallpaperValue(wallpaperId, "no_auto_mute", noAutoMute);
+}
+
+bool ConfigManager::getWallpaperNoAudioProcessing(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "no_audio_processing", noAudioProcessing()).toBool();
+}
+
+void ConfigManager::setWallpaperNoAudioProcessing(const QString& wallpaperId, bool noAudioProcessing)
+{
+    setWallpaperValue(wallpaperId, "no_audio_processing", noAudioProcessing);
+}
+
+QString ConfigManager::getWallpaperWindowMode(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "window_mode", windowMode()).toString();
+}
+
+void ConfigManager::setWallpaperWindowMode(const QString& wallpaperId, const QString& windowMode)
+{
+    setWallpaperValue(wallpaperId, "window_mode", windowMode);
+}
+
+bool ConfigManager::getWallpaperSilent(const QString& wallpaperId) const
+{
+    return getWallpaperValue(wallpaperId, "silent", getSilent()).toBool();
+}
+
+void ConfigManager::setWallpaperSilent(const QString& wallpaperId, bool silent)
+{
+    setWallpaperValue(wallpaperId, "silent", silent);
+}
+
+// Get all wallpaper-specific settings for a wallpaper
+QMap<QString, QVariant> ConfigManager::getAllWallpaperSettings(const QString& wallpaperId) const
+{
+    QMap<QString, QVariant> settings;
+    
+    // List of all wallpaper-specific settings keys
+    QStringList settingKeys = {
+        "screen_root",
+        "audio_device",
+        "master_volume",
+        "no_auto_mute",
+        "no_audio_processing",
+        "window_mode",
+        "silent"
+    };
+    
+    for (const QString& key : settingKeys) {
+        QString fullKey = QString("wallpapers/%1/%2").arg(wallpaperId, key);
+        QVariant value = m_settings->value(fullKey);
+        if (value.isValid() && !value.isNull()) {
+            settings[key] = value;
+        }
+    }
+    
+    return settings;
+}

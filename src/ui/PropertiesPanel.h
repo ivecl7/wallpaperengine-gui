@@ -43,6 +43,7 @@ struct WallpaperSettings {
     int volume = 15;
     bool noAutoMute = false;
     bool noAudioProcessing = false;
+    QString audioDevice = "default";
 
     // Performance settings
     int fps = 30;
@@ -183,6 +184,7 @@ private:
     QLabel* m_volumeLabel;
     QCheckBox* m_noAutoMuteCheckBox;
     QCheckBox* m_noAudioProcessingCheckBox;
+    QComboBox* m_audioDeviceCombo;
     
     // Performance settings controls
     QSpinBox* m_fpsSpinBox;

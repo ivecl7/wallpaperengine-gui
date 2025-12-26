@@ -153,6 +153,29 @@ public:
     QVariant value(const QString& key, const QVariant& defaultValue = QVariant()) const;
     void setValue(const QString& key, const QVariant& value);
 
+    // Wallpaper-specific configuration
+    QVariant getWallpaperValue(const QString& wallpaperId, const QString& key, const QVariant& defaultValue = QVariant()) const;
+    void setWallpaperValue(const QString& wallpaperId, const QString& key, const QVariant& value);
+    
+    // Convenience methods for wallpaper-specific settings
+    QString getWallpaperScreenRoot(const QString& wallpaperId) const;
+    void setWallpaperScreenRoot(const QString& wallpaperId, const QString& screenRoot);
+    QString getWallpaperAudioDevice(const QString& wallpaperId) const;
+    void setWallpaperAudioDevice(const QString& wallpaperId, const QString& audioDevice);
+    int getWallpaperMasterVolume(const QString& wallpaperId) const;
+    void setWallpaperMasterVolume(const QString& wallpaperId, int volume);
+    bool getWallpaperNoAutoMute(const QString& wallpaperId) const;
+    void setWallpaperNoAutoMute(const QString& wallpaperId, bool noAutoMute);
+    bool getWallpaperNoAudioProcessing(const QString& wallpaperId) const;
+    void setWallpaperNoAudioProcessing(const QString& wallpaperId, bool noAudioProcessing);
+    QString getWallpaperWindowMode(const QString& wallpaperId) const;
+    void setWallpaperWindowMode(const QString& wallpaperId, const QString& windowMode);
+    bool getWallpaperSilent(const QString& wallpaperId) const;
+    void setWallpaperSilent(const QString& wallpaperId, bool silent);
+    
+    // Get all wallpaper-specific settings for a wallpaper
+    QMap<QString, QVariant> getAllWallpaperSettings(const QString& wallpaperId) const;
+
 private:
     explicit ConfigManager(QObject* parent = nullptr);
     ~ConfigManager() = default;

@@ -1345,93 +1345,76 @@ void MainWindow::onWallpaperLaunched(const WallpaperInfo& wallpaper)
         
         qCDebug(mainWindow) << "About to call wallpaper manager launch method";
         
-        // Get custom settings from the properties panel
+        // Get custom settings from ConfigManager
         QStringList additionalArgs;
         if (m_propertiesPanel) {
-            // Create temporary file to load settings
-            QString settingsPath = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-            if (settingsPath.isEmpty()) {
-                settingsPath = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
-            }
-            if (settingsPath.isEmpty()) {
-                settingsPath = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + 
-                              "/.cache/wallpaperengine-gui";
-            } else {
-                settingsPath += "/wallpaperengine-gui";
-            }
-            settingsPath += "/settings/" + wallpaper.id + ".json";
+            ConfigManager& config = ConfigManager::instance();
             
-            // Check if settings file exists
-            QFile settingsFile(settingsPath);
-            if (settingsFile.exists() && settingsFile.open(QIODevice::ReadOnly)) {
-                // Parse settings
-                QJsonDocument doc = QJsonDocument::fromJson(settingsFile.readAll());
-                settingsFile.close();
-                
-                if (doc.isObject()) {
-                    QJsonObject settings = doc.object();
-                    
-                    // Add command line args based on settings
-                    if (settings["silent"].toBool()) additionalArgs << "--silent";
-                    
-                    int volume = settings["volume"].toInt(15);
-                    if (volume != 15) additionalArgs << "--volume" << QString::number(volume);
-                    
-                    if (settings["noAutoMute"].toBool()) additionalArgs << "--noautomute";
-                    if (settings["noAudioProcessing"].toBool()) additionalArgs << "--no-audio-processing";
-                    
-                    int fps = settings["fps"].toInt(30);
-                    if (fps != 30) additionalArgs << "--fps" << QString::number(fps);
-                    
-                    QString windowGeometry = settings["windowGeometry"].toString();
-                    if (!windowGeometry.isEmpty()) additionalArgs << "--window" << windowGeometry;
-                    
-                    // Handle screen root settings, check custom override first
-                    QString customScreenRoot = settings["customScreenRoot"].toString();
-                    QString screenRoot = settings["screenRoot"].toString();
-                    QString effectiveScreen = customScreenRoot.isEmpty() ? screenRoot : customScreenRoot;
-                    
-                    if (!effectiveScreen.isEmpty()) {
-                        if (wallpaper.type == "External") {
-                            additionalArgs << "--output" << effectiveScreen;
-                        } else {
-                            additionalArgs << "--screen-root" << effectiveScreen;
-                        }
-                    }
-                    
-                    QString backgroundId = settings["backgroundId"].toString();
-                    if (!backgroundId.isEmpty()) additionalArgs << "--bg" << backgroundId;
-                    
-                    QString scaling = settings["scaling"].toString();
-                    if (scaling != "default") additionalArgs << "--scaling" << scaling;
-                    
-                    QString clamping = settings["clamping"].toString();
-                    if (clamping != "clamp") additionalArgs << "--clamping" << clamping;
-                    
-                    if (settings["disableMouse"].toBool()) additionalArgs << "--disable-mouse";
-                    if (settings["disableParallax"].toBool()) additionalArgs << "--disable-parallax";
-                    if (settings["noFullscreenPause"].toBool()) additionalArgs << "--no-fullscreen-pause";
-                }
-            } else {
-                // No settings file exists, apply default values that are shown in GUI
-                // This ensures the displayed defaults are actually applied on first launch
-                
-                // Volume default is 15% - apply it explicitly
-                additionalArgs << "--volume" << "15";
-                
-                // FPS default is 30 - apply it explicitly  
-                additionalArgs << "--fps" << "30";
-                
-                // Screen root handling based on wallpaper type
-                if (wallpaper.type == "External") {
-                    additionalArgs << "--output" << "HDMI-A-1";
-                } else {
-                    additionalArgs << "--screen-root" << "HDMI-A-1";
-                }
-                
-                // Other defaults (silent=false, scaling=default, clamping=clamp) don't need explicit args
-                // as they are the wallpaper engine's own defaults
+            // Add wallpaper-specific settings from ConfigManager
+            bool silent = config.getWallpaperSilent(wallpaper.id);
+            if (silent) additionalArgs << "--silent";
+            
+            int volume = config.getWallpaperMasterVolume(wallpaper.id);
+            if (volume != 15) additionalArgs << "--volume" << QString::number(volume);
+            
+            bool noAutoMute = config.getWallpaperNoAutoMute(wallpaper.id);
+            if (noAutoMute) additionalArgs << "--noautomute";
+            
+            bool noAudioProcessing = config.getWallpaperNoAudioProcessing(wallpaper.id);
+            if (noAudioProcessing) additionalArgs << "--no-audio-processing";
+            
+            // Add audio device if configured (important for sound bug)
+            QString audioDevice = config.getWallpaperAudioDevice(wallpaper.id);
+            if (!audioDevice.isEmpty() && audioDevice != "default") {
+                additionalArgs << "--audio-device" << audioDevice;
             }
+            
+            // Get screen root - try wallpaper-specific, then global, then default DP-4
+            QString screenRoot = config.getWallpaperScreenRoot(wallpaper.id);
+            if (screenRoot.isEmpty()) {
+                screenRoot = config.screenRoot();
+                // If still empty, use DP-4 as default
+                if (screenRoot.isEmpty()) {
+                    screenRoot = "DP-4";
+                }
+            }
+            
+            // Check for custom screen root override
+            QString customScreenRoot = config.getWallpaperValue(wallpaper.id, "custom_screen_root").toString();
+            QString effectiveScreen = customScreenRoot.isEmpty() ? screenRoot : customScreenRoot;
+            
+            if (!effectiveScreen.isEmpty()) {
+                if (wallpaper.type == "External") {
+                    additionalArgs << "--output" << effectiveScreen;
+                } else {
+                    additionalArgs << "--screen-root" << effectiveScreen;
+                }
+            }
+            
+            // Add other settings
+            QString windowGeometry = config.getWallpaperValue(wallpaper.id, "window_geometry").toString();
+            if (!windowGeometry.isEmpty()) additionalArgs << "--window" << windowGeometry;
+            
+            int fps = config.getWallpaperValue(wallpaper.id, "fps", 30).toInt();
+            if (fps != 30) additionalArgs << "--fps" << QString::number(fps);
+            
+            QString backgroundId = config.getWallpaperValue(wallpaper.id, "background_id").toString();
+            if (!backgroundId.isEmpty()) additionalArgs << "--bg" << backgroundId;
+            
+            QString scaling = config.getWallpaperValue(wallpaper.id, "scaling", "default").toString();
+            if (scaling != "default") additionalArgs << "--scaling" << scaling;
+            
+            QString clamping = config.getWallpaperValue(wallpaper.id, "clamping", "clamp").toString();
+            if (clamping != "clamp") additionalArgs << "--clamping" << clamping;
+            
+            bool disableMouse = config.getWallpaperValue(wallpaper.id, "disable_mouse", false).toBool();
+            if (disableMouse) additionalArgs << "--disable-mouse";
+            
+            bool disableParallax = config.getWallpaperValue(wallpaper.id, "disable_parallax", false).toBool();
+            if (disableParallax) additionalArgs << "--disable-parallax";
+            
+            bool noFullscreenPause = config.getWallpaperValue(wallpaper.id, "no_fullscreen_pause", false).toBool();
+            if (noFullscreenPause) additionalArgs << "--no-fullscreen-pause";
         }
         
         // Add assets directory if configured

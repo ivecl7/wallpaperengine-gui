@@ -138,6 +138,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     , m_volumeLabel(new QLabel("15%"))
     , m_noAutoMuteCheckBox(new QCheckBox("Don't mute when other apps play audio"))
     , m_noAudioProcessingCheckBox(new QCheckBox("Disable audio processing"))
+    , m_audioDeviceCombo(new QComboBox)
     , m_fpsSpinBox(new QSpinBox)
     , m_windowGeometryEdit(new QLineEdit)
     , m_screenRootCombo(new QComboBox)
@@ -207,6 +208,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     });
     connect(m_noAutoMuteCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
     connect(m_noAudioProcessingCheckBox, &QCheckBox::toggled, this, &PropertiesPanel::onSettingChanged);
+    connect(m_audioDeviceCombo, &QComboBox::currentTextChanged, this, &PropertiesPanel::onSettingChanged);
     connect(m_fpsSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &PropertiesPanel::onSettingChanged);
     connect(m_windowGeometryEdit, &QLineEdit::textChanged, this, &PropertiesPanel::onSettingChanged);
     connect(m_screenRootCombo, &QComboBox::currentTextChanged, this, &PropertiesPanel::onScreenRootChanged);
@@ -523,6 +525,17 @@ void PropertiesPanel::setupSettingsUI(QWidget* settingsTab)
     
     // Store reference for hiding later
     m_noAudioProcessingWidget->setObjectName("noAudioProcessingWidget");
+    
+    // Audio device selection - important for sound bug fix
+    m_audioDeviceCombo->setMinimumHeight(28);
+    m_audioDeviceCombo->setEditable(true);
+    m_audioDeviceCombo->addItem("default", "default");
+    // Additional audio devices will be populated dynamically
+    auto* audioDeviceLabel = new QLabel("Audio device:");
+    audioDeviceLabel->setMinimumWidth(80);
+    audioDeviceLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    audioDeviceLabel->setStyleSheet("font-weight: bold;");
+    audioLayout->addRow(audioDeviceLabel, m_audioDeviceCombo);
     
     scrollLayout->addWidget(audioGroup);
     
@@ -1233,6 +1246,7 @@ void PropertiesPanel::onSettingChanged()
     m_currentSettings.volume = m_volumeSlider->value();
     m_currentSettings.noAutoMute = m_noAutoMuteCheckBox->isChecked();
     m_currentSettings.noAudioProcessing = m_noAudioProcessingCheckBox->isChecked();
+    m_currentSettings.audioDevice = m_audioDeviceCombo->currentText();
     m_currentSettings.fps = m_fpsSpinBox->value();
     m_currentSettings.windowGeometry = m_windowGeometryEdit->text();
     QString selectedScreen = m_screenRootCombo->currentText();
@@ -1363,78 +1377,103 @@ void PropertiesPanel::restartWallpaperWithChanges()
 
 bool PropertiesPanel::saveWallpaperSettings(const QString& wallpaperId)
 {
-    QString settingsPath = getSettingsFilePath(wallpaperId);
+    ConfigManager& config = ConfigManager::instance();
     
-    // Create directory if it doesn't exist
-    QDir settingsDir = QFileInfo(settingsPath).dir();
-    if (!settingsDir.exists()) {
-        settingsDir.mkpath(".");
+    // Save wallpaper-specific settings to ConfigManager
+    config.setWallpaperSilent(wallpaperId, m_currentSettings.silent);
+    config.setWallpaperMasterVolume(wallpaperId, m_currentSettings.volume);
+    config.setWallpaperNoAutoMute(wallpaperId, m_currentSettings.noAutoMute);
+    config.setWallpaperNoAudioProcessing(wallpaperId, m_currentSettings.noAudioProcessing);
+    
+    // Save screen root
+    QString screenRoot = m_currentSettings.screenRoot;
+    // If it's the default DP-4, check if we should actually save it
+    if (screenRoot == "DP-4") {
+        // Only save if user explicitly set it to DP-4 (not just default)
+        QString globalScreenRoot = config.screenRoot();
+        if (globalScreenRoot.isEmpty()) {
+            config.setWallpaperScreenRoot(wallpaperId, screenRoot);
+        } else if (globalScreenRoot != screenRoot) {
+            config.setWallpaperScreenRoot(wallpaperId, screenRoot);
+        }
+    } else if (!screenRoot.isEmpty()) {
+        config.setWallpaperScreenRoot(wallpaperId, screenRoot);
     }
     
-    QJsonObject settingsObj;
-    settingsObj["silent"] = m_currentSettings.silent;
-    settingsObj["volume"] = m_currentSettings.volume;
-    settingsObj["noAutoMute"] = m_currentSettings.noAutoMute;
-    settingsObj["noAudioProcessing"] = m_currentSettings.noAudioProcessing;
-    settingsObj["fps"] = m_currentSettings.fps;
-    settingsObj["windowGeometry"] = m_currentSettings.windowGeometry;
-    settingsObj["screenRoot"] = m_currentSettings.screenRoot;
-    settingsObj["customScreenRoot"] = m_currentSettings.customScreenRoot;
-    settingsObj["backgroundId"] = m_currentSettings.backgroundId;
-    settingsObj["scaling"] = m_currentSettings.scaling;
-    settingsObj["clamping"] = m_currentSettings.clamping;
-    settingsObj["disableMouse"] = m_currentSettings.disableMouse;
-    settingsObj["disableParallax"] = m_currentSettings.disableParallax;
-    settingsObj["noFullscreenPause"] = m_currentSettings.noFullscreenPause;
-    
-    QJsonDocument doc(settingsObj);
-    
-    QFile file(settingsPath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(propertiesPanel) << "Failed to open settings file for writing:" << settingsPath;
-        return false;
+    // Save custom screen root if different from regular screen root
+    if (!m_currentSettings.customScreenRoot.isEmpty() && m_currentSettings.customScreenRoot != screenRoot) {
+        config.setWallpaperValue(wallpaperId, "custom_screen_root", m_currentSettings.customScreenRoot);
     }
     
-    file.write(doc.toJson());
+    // Save other settings
+    config.setWallpaperValue(wallpaperId, "fps", m_currentSettings.fps);
+    config.setWallpaperValue(wallpaperId, "window_geometry", m_currentSettings.windowGeometry);
+    config.setWallpaperValue(wallpaperId, "background_id", m_currentSettings.backgroundId);
+    config.setWallpaperValue(wallpaperId, "scaling", m_currentSettings.scaling);
+    config.setWallpaperValue(wallpaperId, "clamping", m_currentSettings.clamping);
+    config.setWallpaperValue(wallpaperId, "disable_mouse", m_currentSettings.disableMouse);
+    config.setWallpaperValue(wallpaperId, "disable_parallax", m_currentSettings.disableParallax);
+    config.setWallpaperValue(wallpaperId, "no_fullscreen_pause", m_currentSettings.noFullscreenPause);
+    
+    // Save WNEL-specific settings
+    config.setWallpaperValue(wallpaperId, "no_loop", m_currentSettings.noLoop);
+    config.setWallpaperValue(wallpaperId, "no_hardware_decode", m_currentSettings.noHardwareDecode);
+    config.setWallpaperValue(wallpaperId, "force_x11", m_currentSettings.forceX11);
+    config.setWallpaperValue(wallpaperId, "force_wayland", m_currentSettings.forceWayland);
+    config.setWallpaperValue(wallpaperId, "verbose", m_currentSettings.verbose);
+    config.setWallpaperValue(wallpaperId, "log_level", m_currentSettings.logLevel);
+    config.setWallpaperValue(wallpaperId, "mpv_options", m_currentSettings.mpvOptions);
+    
+    // Set audio device if configured
+    config.setWallpaperAudioDevice(wallpaperId, m_currentSettings.audioDevice);
+    
     return true;
 }
 
 bool PropertiesPanel::loadWallpaperSettings(const QString& wallpaperId)
 {
-    QString settingsPath = getSettingsFilePath(wallpaperId);
+    ConfigManager& config = ConfigManager::instance();
     
-    QFile file(settingsPath);
-    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
-        // Use default settings
-        m_currentSettings = WallpaperSettings();
-        updateSettingsControls();
-        return false;
+    // Load wallpaper-specific settings from ConfigManager
+    m_currentSettings.silent = config.getWallpaperSilent(wallpaperId);
+    m_currentSettings.volume = config.getWallpaperMasterVolume(wallpaperId);
+    m_currentSettings.noAutoMute = config.getWallpaperNoAutoMute(wallpaperId);
+    m_currentSettings.noAudioProcessing = config.getWallpaperNoAudioProcessing(wallpaperId);
+    m_currentSettings.audioDevice = config.getWallpaperAudioDevice(wallpaperId);
+    
+    // Get screen root - try wallpaper-specific, then global default
+    QString screenRoot = config.getWallpaperScreenRoot(wallpaperId);
+    if (screenRoot.isEmpty()) {
+        screenRoot = config.screenRoot();
+        // If still empty, use DP-4 as default
+        if (screenRoot.isEmpty()) {
+            screenRoot = "DP-4";
+        }
     }
+    m_currentSettings.screenRoot = screenRoot;
     
-    QByteArray data = file.readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
+    // For custom screen root, check if user has overridden it in UI
+    QString customScreenRoot = config.getWallpaperValue(wallpaperId, "custom_screen_root").toString();
+    m_currentSettings.customScreenRoot = customScreenRoot;
     
-    if (!doc.isObject()) {
-        m_currentSettings = WallpaperSettings();
-        updateSettingsControls();
-        return false;
-    }
+    // Other settings - load from wallpaper-specific or use defaults
+    m_currentSettings.fps = config.getWallpaperValue(wallpaperId, "fps", 30).toInt();
+    m_currentSettings.windowGeometry = config.getWallpaperValue(wallpaperId, "window_geometry").toString();
+    m_currentSettings.backgroundId = config.getWallpaperValue(wallpaperId, "background_id").toString();
+    m_currentSettings.scaling = config.getWallpaperValue(wallpaperId, "scaling", "default").toString();
+    m_currentSettings.clamping = config.getWallpaperValue(wallpaperId, "clamping", "clamp").toString();
+    m_currentSettings.disableMouse = config.getWallpaperValue(wallpaperId, "disable_mouse", false).toBool();
+    m_currentSettings.disableParallax = config.getWallpaperValue(wallpaperId, "disable_parallax", false).toBool();
+    m_currentSettings.noFullscreenPause = config.getWallpaperValue(wallpaperId, "no_fullscreen_pause", false).toBool();
     
-    QJsonObject obj = doc.object();
-    m_currentSettings.silent = obj["silent"].toBool();
-    m_currentSettings.volume = obj["volume"].toInt(15);
-    m_currentSettings.noAutoMute = obj["noAutoMute"].toBool();
-    m_currentSettings.noAudioProcessing = obj["noAudioProcessing"].toBool();
-    m_currentSettings.fps = obj["fps"].toInt(30);
-    m_currentSettings.windowGeometry = obj["windowGeometry"].toString();
-    m_currentSettings.screenRoot = obj["screenRoot"].toString();
-    m_currentSettings.customScreenRoot = obj["customScreenRoot"].toString();
-    m_currentSettings.backgroundId = obj["backgroundId"].toString();
-    m_currentSettings.scaling = obj["scaling"].toString("default");
-    m_currentSettings.clamping = obj["clamping"].toString("clamp");
-    m_currentSettings.disableMouse = obj["disableMouse"].toBool();
-    m_currentSettings.disableParallax = obj["disableParallax"].toBool();
-    m_currentSettings.noFullscreenPause = obj["noFullscreenPause"].toBool();
+    // WNEL-specific settings
+    m_currentSettings.noLoop = config.getWallpaperValue(wallpaperId, "no_loop", false).toBool();
+    m_currentSettings.noHardwareDecode = config.getWallpaperValue(wallpaperId, "no_hardware_decode", false).toBool();
+    m_currentSettings.forceX11 = config.getWallpaperValue(wallpaperId, "force_x11", false).toBool();
+    m_currentSettings.forceWayland = config.getWallpaperValue(wallpaperId, "force_wayland", false).toBool();
+    m_currentSettings.verbose = config.getWallpaperValue(wallpaperId, "verbose", false).toBool();
+    m_currentSettings.logLevel = config.getWallpaperValue(wallpaperId, "log_level", "info").toString();
+    m_currentSettings.mpvOptions = config.getWallpaperValue(wallpaperId, "mpv_options").toString();
     
     updateSettingsControls();
     return true;
@@ -1502,6 +1541,7 @@ void PropertiesPanel::updateSettingsControls()
     m_volumeSlider->blockSignals(true);
     m_noAutoMuteCheckBox->blockSignals(true);
     m_noAudioProcessingCheckBox->blockSignals(true);
+    m_audioDeviceCombo->blockSignals(true);
     m_fpsSpinBox->blockSignals(true);
     m_windowGeometryEdit->blockSignals(true);
     m_screenRootCombo->blockSignals(true);
@@ -1528,6 +1568,19 @@ void PropertiesPanel::updateSettingsControls()
     m_volumeLabel->setText(QString("%1%").arg(m_currentSettings.volume));
     m_noAutoMuteCheckBox->setChecked(m_currentSettings.noAutoMute);
     m_noAudioProcessingCheckBox->setChecked(m_currentSettings.noAudioProcessing);
+    
+    // Set audio device combo
+    QString audioDevice = m_currentSettings.audioDevice;
+    if (audioDevice.isEmpty()) {
+        audioDevice = "default";
+    }
+    int audioDeviceIndex = m_audioDeviceCombo->findText(audioDevice);
+    if (audioDeviceIndex >= 0) {
+        m_audioDeviceCombo->setCurrentIndex(audioDeviceIndex);
+    } else {
+        m_audioDeviceCombo->setCurrentText(audioDevice);
+    }
+    
     m_fpsSpinBox->setValue(m_currentSettings.fps);
     m_windowGeometryEdit->setText(m_currentSettings.windowGeometry);
     // Handle screen root settings in the correct order
@@ -1568,6 +1621,7 @@ void PropertiesPanel::updateSettingsControls()
     m_volumeSlider->blockSignals(false);
     m_noAutoMuteCheckBox->blockSignals(false);
     m_noAudioProcessingCheckBox->blockSignals(false);
+    m_audioDeviceCombo->blockSignals(false);
     m_fpsSpinBox->blockSignals(false);
     m_windowGeometryEdit->blockSignals(false);
     m_screenRootCombo->blockSignals(false);
