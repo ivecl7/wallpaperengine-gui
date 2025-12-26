@@ -325,8 +325,10 @@ bool WallpaperManager::launchWallpaper(const QString& wallpaperId, const QString
     QString workingDir = binaryInfo.absolutePath();
     m_wallpaperProcess->setWorkingDirectory(workingDir);
     
-    // Preserve the current environment
+    // Preserve the current environment and add NVIDIA specific variables
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("__NV_PRIME_RENDER_OFFLOAD", "1");
+    env.insert("__GLX_VENDOR_LIBRARY_NAME", "nvidia");
     m_wallpaperProcess->setProcessEnvironment(env);
     
     // Start process

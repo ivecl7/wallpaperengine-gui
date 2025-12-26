@@ -544,6 +544,12 @@ bool WNELAddon::launchExternalWallpaper(const QString& wallpaperId, const QStrin
     qCDebug(wnelAddon) << "Launching external wallpaper with command:" << binaryPath;
     qCDebug(wnelAddon) << "Media file symlink path:" << info.symlinkPath;
     
+    // Add NVIDIA specific environment variables
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("__NV_PRIME_RENDER_OFFLOAD", "1");
+    env.insert("__GLX_VENDOR_LIBRARY_NAME", "nvidia");
+    m_wallpaperProcess->setProcessEnvironment(env);
+    
     // Start process
     m_wallpaperProcess->start(binaryPath, args);
     
