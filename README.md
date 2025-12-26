@@ -188,3 +188,5 @@ src/
 2. Make GUI better
 3. Clean the code
 4. ?
+
+代码太垃圾了, 救不了
